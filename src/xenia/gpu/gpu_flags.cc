@@ -12,6 +12,12 @@
 DEFINE_path(trace_gpu_prefix, "scratch/gpu/",
             "Prefix path for GPU trace files.", "GPU.Debug");
 DEFINE_bool(trace_gpu_stream, false, "Trace all GPU packets.", "GPU.Debug");
+DEFINE_string(trace_gpu_frames, "",
+              "Comma-separated frame numbers to capture as single frame GPU "
+              "traces, the same way as a manual frame trace request, for "
+              "example \"300,1200\". Frames are counted by the swaps "
+              "before them, and each trace is named after its frame number.",
+              "GPU.Debug");
 
 DEFINE_path(
     dump_shaders, "",
@@ -71,21 +77,6 @@ DEFINE_int32(occlusion_query_fake_upper_threshold, 100,
              "Keep this higher than occlusion_query_fake_lower_threshold.\n"
              "Ignored if occlusion_query_fake_lower_threshold is -1.",
              "GPU");
-DEFINE_int32(occlusion_query_querybatch_range, 0,
-             "Range of fake sample count values to walk for titles using the "
-             "D3D QueryBatch standard before wrapping back to "
-             "occlusion_query_fake_lower_threshold.\n"
-             "This shouldn't be changed from the default value of 0 (disabled) "
-             "unless necessary for a specific title.",
-             "GPU");
-DEFINE_double(
-    occlusion_query_saturation, 1.0,
-    "Compress higher occlusion query sample counts before guest writeback.\n"
-    "This can be useful if effects such as lens flares appear too strong.\n"
-    "1.0 = default behavior\n"
-    "0.0 = collapse all nonzero sample counts to 1\n"
-    "Values around 0.90 are a good starting point for subtle tuning.",
-    "GPU");
 
 DEFINE_int32(anisotropic_override, -1,
              "Forces anisotropic filtering (AF) for eligible textures.\n"
@@ -121,14 +112,30 @@ DEFINE_bool(
     "GPU");
 
 DEFINE_bool(
-    ac6_ground_fix, false,
-    "This fixes(hide) issues with black ground in AC6. Use only in AC6. "
-    "Might cause issues in other titles.",
-    "HACKS");
-
-DEFINE_bool(
     force_depth_clamp, false,
     "Use host depth clamping instead of near and far plane clipping when "
     "guest clipping is enabled. X/Y/W clipping is unaffected. On Vulkan, "
     "this requires depthClamp support.",
     "GPU");
+
+DEFINE_bool(
+    mulsc_round_toward_zero, false,
+    "Round mulsc products toward zero instead of to nearest even. This fixes "
+    "bad geometry in several Volition Engine titles and possibly others. "
+    "This rounding behavior hasn't been confirmed on real hardware, so it's "
+    "disabled by default.",
+    "GPU");
+
+DEFINE_bool(xenos_sample_positions, false,
+            "Rasterize 2x and 4x MSAA render targets at the Xenos sample "
+            "positions, like real hardware, if the GPU and driver support it.\n"
+            "Only applies to RTV/FBO - ROV/FSI render targets always use Xenos "
+            "positions since they safely map coverage and calculate depth "
+            "in-shader.",
+            "GPU");
+
+DEFINE_bool(texture_point_snap, false,
+            "Snap normalized point sampled 2D texture coordinates to texel "
+            "centers. Fixes texture seams in titles that use virtual textures, "
+            "e.g. idTech 5, but may cause rendering issues in other titles.",
+            "GPU");

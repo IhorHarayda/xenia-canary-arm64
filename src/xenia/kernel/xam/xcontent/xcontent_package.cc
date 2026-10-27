@@ -74,7 +74,8 @@ ContentPackage::~ContentPackage() {
   }
 }
 
-bool ContentPackage::MountPackageAndRegister(const std::string_view root_name) {
+bool ContentPackage::MountPackageAndRegister(const std::string_view root_name,
+                                             const std::string_view root_path) {
   auto device = MountPackage();
 
   if (!device || !device->Initialize()) {
@@ -87,7 +88,8 @@ bool ContentPackage::MountPackageAndRegister(const std::string_view root_name) {
     if (!name.ends_with(":")) {
       name.append(":");
     }
-    if (!file_system_->RegisterSymbolicLink(name, GetDevicePath())) {
+    if (!file_system_->RegisterSymbolicLink(
+            name, xe::utf8::join_guest_paths(GetDevicePath(), root_path))) {
       XELOGE(
           "{}: Cannot register package with mount path: {}. Mount path already "
           "in-use.",
@@ -156,11 +158,8 @@ XCONTENT_DATA_INTERNAL ContentPackage::GetContentMetadata() const {
 void ContentPackage::ComputePackageLicenseMask() {
   uint32_t final_license = 0;
   for (uint8_t i = 0; i < license_count; i++) {
-    if (header_.content_header.licenses[i].license_flags) {
-      final_license |= header_.content_header.licenses[i].license_bits;
-    }
+    final_license |= header_.content_header.licenses[i].license_bits;
   }
-
   license_mask_ = final_license;
 }
 

@@ -159,8 +159,7 @@ void UserTracker::AddTitleToPlayedList(uint64_t xuid) {
   }
 
   const uint32_t title_id = spa_data_->title_id();
-  auto title_gpd = user->games_gpd_.find(title_id);
-  if (title_gpd == user->games_gpd_.end()) {
+  if (!user->games_gpd_.contains(title_id)) {
     user->games_gpd_.emplace(title_id, GpdInfoTitle(title_id));
     UpdateTitleGpdFile();
   }
@@ -222,7 +221,7 @@ void UserTracker::RemoveTitleFromPlayedList(uint64_t xuid, uint32_t title_id) {
 
 // Privates
 bool UserTracker::IsUserTracked(uint64_t xuid) const {
-  return tracked_xuids_.find(xuid) != tracked_xuids_.cend();
+  return tracked_xuids_.contains(xuid);
 }
 
 std::optional<TitleInfo> UserTracker::GetUserTitleInfo(
@@ -489,6 +488,8 @@ void UserTracker::AddProperty(const uint64_t xuid, const Property* property) {
     }
   }
 
+  std::lock_guard prop_lock(user->prop_mutex);
+
   auto entry = std::ranges::find_if(
       user->properties_, [property_id](const Property& property_data) {
         return property_data.GetPropertyId().value == property_id.value;
@@ -511,6 +512,8 @@ X_STATUS UserTracker::GetProperty(const uint64_t xuid, uint32_t* property_size,
 
   *property_size = 0;
   const auto& property_id = property->property_id;
+
+  std::lock_guard prop_lock(user->prop_mutex);
 
   const auto entry = std::ranges::find_if(
       std::as_const(user->properties_),
@@ -539,6 +542,8 @@ const Property* UserTracker::GetProperty(const uint64_t xuid,
   if (!user) {
     return nullptr;
   }
+
+  std::lock_guard prop_lock(user->prop_mutex);
 
   const auto entry = std::ranges::find_if(
       std::as_const(user->properties_), [id](const Property& property_data) {
@@ -603,6 +608,30 @@ bool UserTracker::GetUserSetting(uint64_t xuid, uint32_t title_id,
   return true;
 }
 
+std::pair<uint32_t, uint32_t> UserTracker::GetUserSubscriptionData(
+    UserProfile* user) const {
+  std::pair<uint32_t, uint32_t> data;
+  if (const auto setting = GetSetting(
+          user, kDashboardID,
+          static_cast<uint32_t>(
+              UserSettingId::XPROFILE_SUBSCRIPTION_TYPE_LENGTH_IN_MONTHS))) {
+    data.first = std::get<int32_t>(setting->get_host_data());
+  } else {
+    data.first = 0;
+  }
+
+  if (const auto setting =
+          GetSetting(user, kDashboardID,
+                     static_cast<uint32_t>(
+                         UserSettingId::XPROFILE_SUBSCRIPTION_PAYMENT_TYPE))) {
+    data.second = std::get<int32_t>(setting->get_host_data());
+  } else {
+    data.second = 0;
+  }
+
+  return data;
+}
+
 void UserTracker::UpdateContext(uint64_t xuid, uint32_t id, uint32_t value) {
   if (!IsUserTracked(xuid)) {
     return;
@@ -621,6 +650,8 @@ void UserTracker::UpdateContext(uint64_t xuid, uint32_t id, uint32_t value) {
   if (value > context_data->max_value) {
     return;
   }
+
+  std::lock_guard prop_lock(user->prop_mutex);
 
   const auto entry = std::ranges::find_if(
       user->properties_, [id](const Property& property_data) {
@@ -652,6 +683,8 @@ std::optional<uint32_t> UserTracker::GetUserContext(uint64_t xuid,
     return std::nullopt;
   }
 
+  std::lock_guard prop_lock(user->prop_mutex);
+
   const auto entry = std::ranges::find_if(
       std::as_const(user->properties_), [id](const Property& property_data) {
         return property_data.get_type() == X_USER_DATA_TYPE::CONTEXT &&
@@ -677,6 +710,8 @@ std::vector<AttributeKey> UserTracker::GetUserContextIds(uint64_t xuid) const {
 
   std::vector<AttributeKey> entries;
 
+  std::lock_guard prop_lock(user->prop_mutex);
+
   for (const auto& property : user->properties_) {
     if (!property.IsContext()) {
       continue;
@@ -696,6 +731,8 @@ std::vector<AttributeKey> UserTracker::GetUserPropertyIds(uint64_t xuid) const {
   if (!user) {
     return {};
   }
+
+  std::lock_guard prop_lock(user->prop_mutex);
 
   std::vector<AttributeKey> entries;
 

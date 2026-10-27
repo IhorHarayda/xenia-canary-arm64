@@ -183,7 +183,7 @@ class Emulator {
   // functions.
   X_STATUS Setup(
       ui::Window* display_window, ui::ImGuiDrawer* imgui_drawer,
-      bool require_cpu_backend,
+      bool require_cpu_backend, bool with_presentation,
       std::function<std::unique_ptr<apu::AudioSystem>(cpu::Processor*)>
           audio_system_factory,
       std::function<std::unique_ptr<gpu::GraphicsSystem>()>
@@ -307,6 +307,8 @@ class Emulator {
 
   // The game can request another title to be loaded.
   const std::filesystem::path GetNewDiscPath(std::string window_message = "");
+  // Builds and runs the picker itself. UI thread only.
+  const std::filesystem::path ShowDiscPicker(std::string window_message);
 
   void WaitUntilExit();
 

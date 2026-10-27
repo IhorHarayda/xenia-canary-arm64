@@ -47,7 +47,8 @@ class ContentPackage {
 
   // Allows to read package content. Creates dedicated device.
   virtual std::unique_ptr<vfs::Device> MountPackage() = 0;
-  bool MountPackageAndRegister(const std::string_view root_name);
+  bool MountPackageAndRegister(const std::string_view root_name,
+                               const std::string_view root_path = "");
 
   virtual X_RESULT SetThumbnail(std::span<const uint8_t> thumbnail) = 0;
   virtual X_RESULT GetThumbnail(std::vector<uint8_t>& buffer) = 0;
@@ -79,6 +80,8 @@ class ContentPackage {
     return root_name_;
   }
 
+  virtual X_RESULT Flush() = 0;
+
  protected:
   vfs::VirtualFileSystem* file_system_;
   // NtPath for device. Example: \\DEVICE\\<Something>
@@ -96,11 +99,12 @@ class ContentPackage {
   // Separate entry for license for backward compatibility
   uint32_t license_mask_ = 0;
 
+  void ComputePackageLicenseMask();
+
  private:
   void InitializePackageHeader(const XCONTENT_DATA_INTERNAL& metadata,
                                const xex2_opt_execution_info* execution_info,
                                const SpaInfo* spa_info);
-  void ComputePackageLicenseMask();
 };
 
 }  // namespace xam

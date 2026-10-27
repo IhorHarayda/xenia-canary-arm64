@@ -373,10 +373,18 @@ struct X_STATS_DETAILS {
 };
 static_assert_size(X_STATS_DETAILS, 8 + kStatsMaxAmount * 2);
 
+constexpr uint32_t MAX_LAUNCH_DATA_SIZE = 0x3FC;
+
 enum LoaderLaunchFlags : uint32_t {
   GetSystemVersion = 0x00000040,  // XamUpdateGetCurrentSystemVersion
   GetVersionFromExecutionId = 0x00010000,
 };
+
+struct X_TASK_ARGS {
+  be<uint32_t> flags;
+  be<uint32_t> value2;
+};
+static_assert_size(X_TASK_ARGS, 0x8);
 
 }  // namespace xam
 }  // namespace kernel

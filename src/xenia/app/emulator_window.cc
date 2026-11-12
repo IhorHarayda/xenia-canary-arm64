@@ -613,12 +613,7 @@ void EmulatorWindow::ContentInstallDialog::OnDraw(ImGuiIO& io) {
     ImGui::BeginTable(fmt::format("table_{}", entry.name_).c_str(), 2);
     ImGui::TableNextRow(0);
     ImGui::TableSetColumnIndex(0);
-    if (entry.icon_) {
-      ImGui::Image(reinterpret_cast<ImTextureID>(entry.icon_.get()),
-                   ui::default_image_icon_size);
-    } else {
-      ImGui::Dummy(ui::default_image_icon_size);
-    }
+    ui::TitleIcon(entry.icon_.get());
     ImGui::TableNextColumn();
 
     ImGui::Text("Name: %s", entry.name_.c_str());
@@ -689,51 +684,68 @@ void EmulatorWindow::XMPConfigDialog::OnDraw(ImGuiIO& io) {
   ImGui::SetNextWindowSize(ImVec2(20, 20), ImGuiCond_FirstUseEver);
 
   bool dialog_open = true;
-  if (!ImGui::Begin("Audio Player Menu", &dialog_open,
-                    ImGuiWindowFlags_NoCollapse |
-                        ImGuiWindowFlags_AlwaysAutoResize |
-                        ImGuiWindowFlags_HorizontalScrollbar)) {
+  if (!ImGui::Begin(
+          "Audio Player", &dialog_open,
+          ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize)) {
     Close();
     ImGui::End();
     return;
   }
 
   auto audio_player = emulator_window_.emulator_->audio_media_player();
-  using xmp_state = kernel::xam::apps::XmpApp::State;
-  if (audio_player) {
-    ImGui::Text("Audio player status:");
-    ImGui::SameLine();
-    switch (audio_player->GetState()) {
-      case xmp_state::kIdle:
-        ImGui::Text("Idle");
+  if (!audio_player) {
+    ImGui::TextDisabled("Audio player isn't available.");
+  } else if (ImGui::BeginTable("##AudioPlayer", 2,
+                               ImGuiTableFlags_SizingFixedFit)) {
+    using xmp_state = kernel::xam::apps::XmpApp::State;
+    const xmp_state state = audio_player->GetState();
+    const float control_width = ImGui::GetFontSize() * 14.0f;
+    const float button_width = ImGui::GetFontSize() * 5.0f;
+
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Status");
+    ImGui::TableNextColumn();
+    const float control_x = ImGui::GetCursorPosX();
+    ImGui::AlignTextToFramePadding();
+    switch (state) {
+      case xmp_state::kPlaying:
+        ImGui::TextColored(ImVec4(0.45f, 0.85f, 0.45f, 1.0f), "Playing");
         break;
       case xmp_state::kPaused:
-        ImGui::Text("Paused");
-        break;
-      case xmp_state::kPlaying:
-        ImGui::Text("Playing");
+        ImGui::TextColored(ImVec4(0.95f, 0.80f, 0.35f, 1.0f), "Paused");
         break;
       default:
+        ImGui::TextDisabled("Idle");
         break;
     }
-
-    if (audio_player->IsPlaying()) {
-      if (ImGui::Button("Pause")) {
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(control_x + control_width - button_width);
+    ImGui::BeginDisabled(state == xmp_state::kIdle);
+    if (ImGui::Button(state == xmp_state::kPaused ? "Resume" : "Pause",
+                      ImVec2(button_width, 0.0f))) {
+      if (state == xmp_state::kPaused) {
+        audio_player->Continue();
+      } else {
         audio_player->Pause();
       }
-    } else if (audio_player->IsPaused()) {
-      if (ImGui::Button("Resume")) {
-        audio_player->Continue();
-      }
+    }
+    ImGui::EndDisabled();
+
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Volume");
+    ImGui::TableNextColumn();
+    int volume_percent =
+        static_cast<int>(audio_player->GetVolume()->load() * 100.0f + 0.5f);
+    ImGui::SetNextItemWidth(control_width);
+    if (ImGui::SliderInt("##Volume", &volume_percent, 0, 100, "%d%%")) {
+      audio_player->SetVolume(volume_percent / 100.0f);
     }
 
-    volume_ =
-        emulator_window_.emulator_->audio_media_player()->GetVolume()->load();
-
-    if (ImGui::SliderFloat("Audio player volume", &volume_, 0.0f, 1.0f,
-                           "%.2f")) {
-      audio_player->SetVolume(volume_);
-    }
+    ImGui::EndTable();
   }
 
   ImGui::End();
@@ -876,6 +888,9 @@ bool EmulatorWindow::Initialize() {
     display_menu->AddChild(
         MenuItem::Create(MenuItem::Type::kString, "&Take Screenshot", "F12",
                          std::bind(&EmulatorWindow::TakeScreenshot, this)));
+    display_menu->AddChild(
+        MenuItem::Create(MenuItem::Type::kString, "&Reset window size", "",
+                         [this] { window_->ResetLogicalSizeToDefault(); }));
   }
   main_menu->AddChild(std::move(display_menu));
 
@@ -1448,8 +1463,7 @@ void EmulatorWindow::ExtractZarchive() {
         abs_extract_dir = std::filesystem::absolute(extract_dir);
       }
 
-      XELOGI("Extracting zar package: {}\n",
-             zarchive_file_path.filename().string());
+      XELOGI("Extracting zar package: {}\n", zarchive_file_path.filename());
 
       auto result =
           emulator_->ExtractZarchivePackage(abs_path, abs_extract_dir);
@@ -1499,7 +1513,8 @@ void EmulatorWindow::CreateZarchive() {
     file_picker->set_mode(ui::FilePicker::Mode::kSave);
     file_picker->set_type(ui::FilePicker::Type::kFile);
     file_picker->set_multi_selection(false);
-    file_picker->set_file_name(content_dirs.front().filename().string());
+    file_picker->set_file_name(
+        xe::path_to_utf8(content_dirs.front().filename()));
     file_picker->set_default_extension("zar");
     file_picker->set_title("Zarchive File");
     file_picker->set_extensions({
@@ -1550,7 +1565,7 @@ void EmulatorWindow::CreateZarchive() {
       // Normalize the path and make absolute.
       auto abs_content_dir = std::filesystem::absolute(content_path);
 
-      XELOGI("Creating zar package: {}\n", zarchive_file.filename().string());
+      XELOGI("Creating zar package: {}\n", zarchive_file.filename());
 
       auto result =
           emulator_->CreateZarchivePackage(abs_content_dir, zarchive_file);
@@ -1670,7 +1685,7 @@ void EmulatorWindow::ToggleProfilesConfigDialog() {
 
     emulator_->kernel_state()->BroadcastNotification(kXNotificationSystemUI,
                                                      true);
-    emulator_->kernel_state()->xam_state()->is_xam_dialog_present_.store(true);
+    emulator_->kernel_state()->xam_state()->SetUIActive(true);
 
     profile_config_dialog_ =
         std::make_unique<ProfileConfigDialog>(imgui_drawer_.get(), this);
@@ -1683,7 +1698,7 @@ void EmulatorWindow::ToggleProfilesConfigDialog() {
     } else {
       profile_config_dialog_.reset();
     }
-    emulator_->kernel_state()->xam_state()->is_xam_dialog_present_.store(false);
+    emulator_->kernel_state()->xam_state()->SetUIActive(false);
   }
 }
 
@@ -2090,9 +2105,9 @@ EmulatorWindow::ControllerHotKey EmulatorWindow::ProcessControllerHotkey(
 
     // Use filename if title name is empty
     if (recently_launched_titles_[selected_title_index].title_name.empty()) {
-      title_name = recently_launched_titles_[selected_title_index]
-                       .path_to_file.filename()
-                       .string();
+      title_name =
+          xe::path_to_utf8(recently_launched_titles_[selected_title_index]
+                               .path_to_file.filename());
     } else {
       title_name = recently_launched_titles_[selected_title_index].title_name;
     }
@@ -2359,7 +2374,7 @@ void EmulatorWindow::FillRecentlyLaunchedTitlesMenu(
 
     const RecentTitleEntry& entry = recently_launched_titles_[i];
     const std::string item_text = entry.title_name.empty()
-                                      ? entry.path_to_file.string()
+                                      ? xe::path_to_utf8(entry.path_to_file)
                                       : entry.title_name;
 
     recent_menu->AddChild(MenuItem::Create(
@@ -2394,15 +2409,17 @@ void EmulatorWindow::LoadRecentlyLaunchedTitles() {
       std::string title_name =
           entry_table->get_as<std::string>("title_name")->get();
       std::string path = entry_table->get_as<std::string>("path")->get();
+      std::filesystem::path path_to_file = xe::to_path(path);
       std::time_t last_run_time =
           entry_table->get_as<int64_t>("last_run_time")->get();
 
       std::error_code ec = {};
-      if (path.empty() || !std::filesystem::exists(path, ec)) {
+      if (path.empty() || !std::filesystem::exists(path_to_file, ec)) {
         continue;
       }
 
-      recently_launched_titles_.push_back({title_name, path, last_run_time});
+      recently_launched_titles_.push_back(
+          {title_name, path_to_file, last_run_time});
     }
   }
 }
@@ -2473,7 +2490,7 @@ void EmulatorWindow::ClearDialogs() {
   }
 
   imgui_drawer_.get()->ClearDialogs();
-  emulator_->kernel_state()->xam_state()->is_xam_dialog_present_.store(false);
+  emulator_->kernel_state()->xam_state()->SetUIActive(false);
 }
 
 }  // namespace app
